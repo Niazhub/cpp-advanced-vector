@@ -40,6 +40,7 @@ public:
     }
 
     T* operator+(size_t offset) noexcept {
+        // Разрешается получать адрес ячейки памяти, следующей за последним элементом массива
         assert(offset <= capacity_);
         return buffer_ + offset;
     }
@@ -75,10 +76,12 @@ public:
     }
 
 private:
+    // Выделяет сырую память под n элементов и возвращает указатель на неё
     static T* Allocate(size_t n) {
         return n != 0 ? static_cast<T*>(operator new(n * sizeof(T))) : nullptr;
     }
 
+    // Освобождает сырую память, выделенную ранее по адресу buf при помощи Allocate
     static void Deallocate(T* buf) noexcept {
         operator delete(buf);
     }
@@ -299,12 +302,11 @@ private:
     void ReserveEmplaceBack(size_t new_capacity, Args&&... args) {
         RawMemory<T> new_data(new_capacity);
 
+        new (new_data + size_) T(forward<Args>(args)...);
         if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
-            new (new_data + size_) T(forward<Args>(args)...);
             std::uninitialized_move_n(data_.GetAddress(), size_, new_data.GetAddress());
         }
         else {
-            new (new_data + size_) T(forward<Args>(args)...);
             std::uninitialized_copy_n(data_.GetAddress(), size_, new_data.GetAddress());
         }
 
@@ -317,13 +319,13 @@ private:
     void ReserveEmplace(size_t new_capacity, iterator new_pos, Args&&... args) {
         RawMemory<T> new_data(new_capacity);
         size_t index = new_pos - begin();
+
+        new (new_data + index) T(forward<Args>(args)...);
         if constexpr (std::is_nothrow_move_constructible_v<T> || !std::is_copy_constructible_v<T>) {
-            new (new_data + index) T(forward<Args>(args)...);
             std::uninitialized_move_n(data_.GetAddress(), new_pos - data_.GetAddress(), new_data.GetAddress());
             std::uninitialized_move_n(new_pos, data_ + size_ - new_pos, new_data.GetAddress() + (new_pos - data_.GetAddress() + 1));
         }
         else {
-            new (new_data + index) T(forward<Args>(args)...);
             std::uninitialized_copy_n(data_.GetAddress(), new_pos - data_.GetAddress(), new_data.GetAddress());
             std::uninitialized_copy_n(new_pos, data_.GetAddress() + size_ - new_pos, new_data.GetAddress() + (new_pos - data_.GetAddress() + 1));
         }
